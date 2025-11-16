@@ -38,6 +38,7 @@ import decimal
 import os
 import re
 import string
+from types import IntType, FloatType, BooleanType, LongType, ComplexType, StringType, ListType, TupleType, DictType
 
 class ValidateData:
 
@@ -526,7 +527,7 @@ class ValidateData:
             if keyList[i] == None:
                 return False
             if type(keyList[i]) is ListType:
-                if validateData.funcIsValidList(keyList[i]) == False:
+                if ValidateData.funcIsValidList(keyList[i]) == False:
                     return False
 
         #Check key elements

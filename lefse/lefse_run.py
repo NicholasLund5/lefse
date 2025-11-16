@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 
-import os,sys,math,pickle
-from lefse.lefse import *
+#!/usr/bin/env python3
+
+import os, sys, math, pickle, argparse
+from lefse import (init, load_data, get_class_means, test_kw_r, 
+                   test_rep_wilcoxon_r, test_lda_r, test_svm, save_res)
 
 def read_params(args):
     parser = argparse.ArgumentParser(description='LEfSe 1.1.01')

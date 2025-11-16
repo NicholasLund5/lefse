@@ -4,7 +4,7 @@ import os,sys,matplotlib,argparse,string
 # from io import StringIO
 matplotlib.use('Agg')
 from pylab import *
-from lefse.lefse import *
+from lefse import *
 import numpy as np
 
 colors = ['r','g','b','m','c',[1.0,0.5,0.0],[0.0,1.0,0.0],[0.33,0.125,0.0],[0.75,0.75,0.75],'k']

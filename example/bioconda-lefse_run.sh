@@ -1,21 +1,23 @@
+#!/bin/bash
 ## script changed from original by for bioconda-lefse by jfg 2017.10.31
 ## adapted from the original lefse run.sh available at:
 ## https://bitbucket.org/nsegata/lefse/src/54694b4b0d9e335ff1ecafff8db4f1e0cf7004da/example/run.sh?at=default&fileviewer=file-view-default
 ##
+## Modified to use local LEfSe installation instead of conda
 ##
 
+# Set up paths for local LEfSe installation
+LEFSE_ROOT="$(cd .. && pwd)"
+export PYTHONPATH="$LEFSE_ROOT:$PYTHONPATH"
 
 # Download a 3-classes example (with subclasses and subjects) from huttenhower.sph.harvard.edu
 # It is a small subset of the HMP 16S dataset for finding biomarkers characterizing
 # different level of oxygen availability in different bodysites
 wget https://github.com/biobakery/biobakery/raw/master/test_suite/biobakery_tests/data/lefse/input/hmp_small_aerobiosis.txt -O hmp_aerobiosis_small.txt
 
-# As using LEfSe through bioconda, need to activate the LEfSe installation:
-conda activate lefse
-
 # Running the LEfSe commands with -h gives the list of available options
 
-# lefse-format_input.py convert the input data matrix to the format for LEfSe.
+# lefse_format_input.py convert the input data matrix to the format for LEfSe.
 #
 # In this example we use the class information in the first line (-c 1)
 # the subclass in the second line (-s 2) and the subject in the third (-u 3).
@@ -23,20 +25,20 @@ conda activate lefse
 # the value -1 for them.
 # -o 1000000 scales the feature such that the sum (of the same taxonomic leve)
 # is 1M: this is done only for obtaining more meaningful values for the LDA score
-lefse_format_input.py hmp_aerobiosis_small.txt hmp_aerobiosis_small.in -c 1 -s 2 -u 3 -o 1000000
+python ../lefse/lefse_format_input.py hmp_aerobiosis_small.txt hmp_aerobiosis_small.in -c 1 -s 2 -u 3 -o 1000000
 
-# lefse_run.py performs the actual statistica analysis
+# lefse_run.py performs the actual statistical analysis
 #
 # Apply LEfSe on the formatted data producing the results (to be further processed
 # for visualization with the other modules). The option available
 # can be listed using the -h option 
-lefse_run.py hmp_aerobiosis_small.in hmp_aerobiosis_small.res
+python ../lefse/lefse_run.py hmp_aerobiosis_small.in hmp_aerobiosis_small.res
 
 # lefse_plot_res.py visualizes the output
 #
 # Plot the list of biomarkers with their effect size
-# Severak graphical options are available for personalizing the output
-lefse_plot_res.py hmp_aerobiosis_small.res hmp_aerobiosis_small.png
+# Several graphical options are available for personalizing the output
+python ../lefse/lefse_plot_res.py hmp_aerobiosis_small.res hmp_aerobiosis_small.png
 
 # lefse_plot_cladogram.py visualizes the output on a hierarchical tree
 #
@@ -45,20 +47,17 @@ lefse_plot_res.py hmp_aerobiosis_small.res hmp_aerobiosis_small.png
 # In this case we will obtain the RDP taxonomy.
 # This is an early implementation of the module. I'm working on an improved version
 # that will be released independently from LEfSe
-lefse_plot_cladogram.py hmp_aerobiosis_small.res hmp_aerobiosis_small.cladogram.png --format png
+python ../lefse/lefse_plot_cladogram.py hmp_aerobiosis_small.res hmp_aerobiosis_small.cladogram.png --format png
 
 # Create a directory for storing the raw-data representation of the discovered biomarkers
-mkdir biomarkers_raw_images
+mkdir -p biomarkers_raw_images
 
 # lefse_plot_features.py visualizes the raw-data features
 #
 # The module for exporting the raw-data representation of the features.
 # With the default options we will obtain the images for all the features that are
 # detected as biomarkers
-lefse_plot_features.py hmp_aerobiosis_small.in hmp_aerobiosis_small.res biomarkers_raw_images/
-
-## Turn lefse back off
-conda deactivate lefse
+python ../lefse/lefse_plot_features.py hmp_aerobiosis_small.in hmp_aerobiosis_small.res biomarkers_raw_images/
 
 ## bonus: seasonal greetings
 # echo '~ Oíche Shamhna féile dhuit!'

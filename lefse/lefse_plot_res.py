@@ -6,7 +6,7 @@ matplotlib.use('Agg')
 from pylab import *
 from collections import defaultdict
 
-from lefse.lefse import *
+from lefse import *
 import argparse
 
 colors = ['r','g','b','m','c','y','k','w']

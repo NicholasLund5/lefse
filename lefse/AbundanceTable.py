@@ -34,8 +34,8 @@ __status__ = "Development"
 
 import csv
 import sys
-from .CClade import CClade
-from .ConstantsBreadCrumbs import ConstantsBreadCrumbs
+from CClade import CClade
+from ConstantsBreadCrumbs import ConstantsBreadCrumbs
 import copy
 from datetime import date
 import numpy as np
@@ -43,16 +43,17 @@ import os
 import re
 import scipy.stats
 import string
-from .ValidateData import ValidateData
-
+from ValidateData import ValidateData
+from numpy import array
+import json
 
 #*************************************************************
 #*  import biom                                              *
 #* If not found - abnormally exit                            *
 #*************************************************************
 try:
-    from biom.parse import *
-    from biom.table import *
+    from biom.table import Table
+    from biom import load_table
 except ImportError:
     sys.stderr.write("************************************************************************************************************ \n")
     sys.stderr.write("* Error:   biom environment required to process biom files - Not found - run abnormally terminated         * \n")
@@ -319,7 +320,7 @@ class AbundanceTable:
                 sMetadataID = sMetadataID, sLastMetadataRow = sLastMetadataRow, sLastMetadata = sLastMetadata, ostmOutputFile = outputFile)
         else:    
             print("I do not understand the format to read and write the data as, please use the correct file extension or indicate a type.")
-            return( false )
+            return( False )
 
         #If contents is not a false then set contents to appropriate objects
         return AbundanceTable(npaAbundance=lContents[0], dictMetadata=lContents[1], strName=str(xInputFile), strLastMetadata=sLastMetadata, rwmtRowMetadata = lContents[2],
@@ -384,7 +385,7 @@ class AbundanceTable:
             iFirstDataIndex = iMetadataRow + 1
 
         #Used to substitute . to -
-        reSubPeriod = re.compile('\.')
+        reSubPeriod = re.compile(r'\.')
 
         #File writer
         with open(outputFile,'w') as f:
@@ -2001,25 +2002,32 @@ class AbundanceTable:
         # Invoke the              *
         # biom table factory      *     
         #**************************
-        if  bTaxonomyInRowsFlag == False:
-            BiomTable = table_factory(arrData,
-                              lSampNames,
-                              lObservationIds,
-                              lMetaData,
-                              constructor=SparseOTUTable)
-        else:                #There was metadata in the rows
-            BiomTable = table_factory(arrData,
-                              lSampNames,
-                              lObservationIds,
-                              lMetaData,
-                              lObservationMetadataTable if len(lObservationMetadataTable) > 0 else None,
-                              constructor=SparseOTUTable)    
+        
+        # Convert to numpy array
+        arrData = np.array(lData)
+        
+        # Create biom table using modern API (biom-format 2.x)
+        if bTaxonomyInRowsFlag == False:
+            BiomTable = Table(arrData,
+                            lObservationIds,
+                            lSampNames,
+                            observation_metadata=None,
+                            sample_metadata=lMetaData,
+                            type="OTU table")
+        else:  # There was metadata in the rows
+            BiomTable = Table(arrData,
+                            lObservationIds,
+                            lSampNames,
+                            observation_metadata=lObservationMetadataTable if len(lObservationMetadataTable) > 0 else None,
+                            sample_metadata=lMetaData,
+                            type="OTU table")
       
         #**************************
         # Generate biom Output    *   
         #**************************
-        f = open( xOutputFile, "w" ) if isinstance(xOutputFile, str) else xOutputFile
-        f.write(BiomTable.getBiomFormatJsonString(ConstantsBreadCrumbs.c_biom_file_generated_by))
+        f = open(xOutputFile, "w") if isinstance(xOutputFile, str) else xOutputFile
+        # Use modern to_json method instead of getBiomFormatJsonString
+        f.write(BiomTable.to_json(ConstantsBreadCrumbs.c_biom_file_generated_by))
         f.close()
         return
 
