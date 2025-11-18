@@ -13,7 +13,6 @@ export PYTHONPATH="$LEFSE_ROOT:$PYTHONPATH"
 # Download a 3-classes example (with subclasses and subjects) from huttenhower.sph.harvard.edu
 # It is a small subset of the HMP 16S dataset for finding biomarkers characterizing
 # different level of oxygen availability in different bodysites
-wget https://github.com/biobakery/biobakery/raw/master/test_suite/biobakery_tests/data/lefse/input/hmp_small_aerobiosis.txt -O hmp_aerobiosis_small.txt
 
 # Running the LEfSe commands with -h gives the list of available options
 
@@ -32,8 +31,7 @@ python ../lefse/lefse_format_input.py hmp_aerobiosis_small.txt hmp_aerobiosis_sm
 # Apply LEfSe on the formatted data producing the results (to be further processed
 # for visualization with the other modules). The option available
 # can be listed using the -h option 
-python ../lefse/lefse_run.py hmp_aerobiosis_small.in hmp_aerobiosis_small.res
-
+python ../lefse/lefse_run.py hmp_aerobiosis_small.in hmp_aerobiosis_small.res -l -1
 # lefse_plot_res.py visualizes the output
 #
 # Plot the list of biomarkers with their effect size

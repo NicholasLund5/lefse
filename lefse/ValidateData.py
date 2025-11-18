@@ -38,7 +38,15 @@ import decimal
 import os
 import re
 import string
-from types import IntType, FloatType, BooleanType, LongType, ComplexType, StringType, ListType, TupleType, DictType
+IntType = int
+FloatType = float
+BooleanType = bool
+LongType = int  # In Python 3, long and int are unified
+ComplexType = complex
+StringType = str
+ListType = list
+TupleType = tuple
+DictType = dict
 
 class ValidateData:
 

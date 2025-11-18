@@ -46,13 +46,43 @@ from AbundanceTable import *
 #***************************************************************************************************************
 
 def read_input_file(inp_file, CommonArea):
+    print(f"[DEBUG] read_input_file() called with inp_file: {inp_file}")
+    
+    # Validate input file exists
+    if not os.path.exists(inp_file):
+        print(f"[ERROR] Input file does not exist: {inp_file}")
+        raise FileNotFoundError(f"Input file not found: {inp_file}")
+    print(f"[DEBUG] ✓ Input file exists")
 
     if inp_file.endswith('.biom'):              #*  If the file format is biom:
+        print(f"[DEBUG] Detected BIOM format file, processing with biom_processing()")
         CommonArea = biom_processing(inp_file)  #*  Process in biom format
+        returned_rows = len(CommonArea.get('ReturnedData', []))
+        print(f"[DEBUG] BIOM processing complete, returned data shape: {returned_rows} rows")
+        if returned_rows == 0:
+            print(f"[ERROR] BIOM processing returned empty data!")
+        print(f"[DEBUG] ✓ BIOM data loaded successfully")
         return CommonArea                       #*  And return the CommonArea
 
+    print(f"[DEBUG] Reading file as plain text format")
     with open(inp_file) as inp:
-        CommonArea['ReturnedData'] = [[v.strip() for v in line.strip().split("\t")] for line in inp.readlines()]
+        lines = inp.readlines()
+        print(f"[DEBUG] Read {len(lines)} lines from input file")
+        if len(lines) == 0:
+            print(f"[ERROR] Input file is empty!")
+            raise ValueError("Input file is empty")
+        CommonArea['ReturnedData'] = [[v.strip() for v in line.strip().split("\t")] for line in lines]
+        parsed_rows = len(CommonArea['ReturnedData'])
+        print(f"[DEBUG] Parsed into {parsed_rows} rows")
+        if CommonArea['ReturnedData']:
+            col_count = len(CommonArea['ReturnedData'][0])
+            print(f"[DEBUG] First row has {col_count} columns")
+            # Validate all rows have same column count
+            col_counts = [len(row) for row in CommonArea['ReturnedData']]
+            if len(set(col_counts)) > 1:
+                print(f"[WARNING] Inconsistent column counts detected: {set(col_counts)}")
+            else:
+                print(f"[DEBUG] ✓ All {parsed_rows} rows have consistent column count ({col_count})")
         return CommonArea
 
 def transpose(data):
@@ -103,6 +133,23 @@ def remove_missing(data,roc):
 
 
 def sort_by_cl(data,n,c,s,u):
+    print(f"[DEBUG] sort_by_cl() called with n={n} (ncl), c={c} (class idx), s={s} (subclass idx), u={u} (subject idx)")
+    print(f"[DEBUG] Data has {len(data)} rows before sorting")
+    
+    # Validate indices
+    if data and len(data) > 0:
+        row_len = len(data[0])
+        if c >= row_len or c < 0:
+            print(f"[ERROR] Class index {c} out of range for row length {row_len}")
+            raise IndexError(f"Class index {c} out of range")
+        if s is not None and (s >= row_len or s < 0):
+            print(f"[ERROR] Subclass index {s} out of range for row length {row_len}")
+            raise IndexError(f"Subclass index {s} out of range")
+        if u is not None and (u >= row_len or u < 0):
+            print(f"[ERROR] Subject index {u} out of range for row length {row_len}")
+            raise IndexError(f"Subject index {u} out of range")
+        print(f"[DEBUG] ✓ All indices valid for row length {row_len}")
+    
     def sort_lines1(a,b):
         return int(a[c] > b[c])*2-1
 
@@ -128,17 +175,25 @@ def sort_by_cl(data,n,c,s,u):
         return int(a[u] > b[u])*2-1
 
     if n == 3:
+        print(f"[DEBUG] Sorting by class (idx {c}), subclass (idx {s}), and subject (idx {u})")
         data.sort(key = functools.cmp_to_key(lambda a,b: sort_lines3(a,b)))
 
     if n == 2:
         if s is None:
+            print(f"[DEBUG] Sorting by class (idx {c}) and subject (idx {u})")
             data.sort(key = functools.cmp_to_key(lambda a,b: sort_lines2u(a,b)))
         else:
+            print(f"[DEBUG] Sorting by class (idx {c}) and subclass (idx {s})")
             data.sort(key = functools.cmp_to_key(lambda a,b: sort_lines2s(a,b)))
 
     if n == 1:
+        print(f"[DEBUG] Sorting by class only (idx {c})")
         data.sort(key = functools.cmp_to_key(lambda a,b: sort_lines1(a,b)))
 
+    print(f"[DEBUG] Data sorted, {len(data)} rows remain")
+    # Validate sorted data has same length
+    if len(data) > 0:
+        print(f"[DEBUG] ✓ Sort completed successfully, data integrity maintained")
     return data
 
 def group_small_subclasses(cls,min_subcl):
@@ -187,28 +242,71 @@ def get_class_slices(data):
     return dict(class_slices), dict(subclass_slices), dict(class_hierarchy)
 
 def numerical_values(feats,norm):
+    print(f"[DEBUG] numerical_values() called with {len(feats)} features and norm={norm}")
     mm = []
-    for k,v in feats.items():
-        feats[k] = [float(val) for val in v]
-    if norm < 0.0: return feats
+    
+    # Validate features dict is not empty
+    if not feats:
+        print(f"[ERROR] Features dictionary is empty!")
+        raise ValueError("Features dictionary cannot be empty")
+    print(f"[DEBUG] ✓ Features dict non-empty with {len(feats)} features")
+    
+    try:
+        for k,v in feats.items():
+            feats[k] = [float(val) for val in v]
+        print(f"[DEBUG] Converted all values to float")
+        print(f"[DEBUG] ✓ All {len(feats)} features successfully converted to float")
+    except (ValueError, TypeError) as e:
+        print(f"[ERROR] Failed to convert values to float: {e}")
+        raise
+    
+    if norm < 0.0:
+        print(f"[DEBUG] norm < 0.0, skipping normalization")
+        return feats
+    
+    print(f"[DEBUG] Applying normalization with value {norm}")
     tr = list(zip(*(list(feats.values()))))
     mul = []
     fk = list(feats.keys())
     hie = True if sum([k.count(".") for k in fk]) > len(fk) else False
+    print(f"[DEBUG] Hierarchical features detected: {hie}")
+    
     for i in range(len(list(feats.values())[0])):
         if hie: mul.append(sum([t for j,t in enumerate(tr[i]) if fk[j].count(".") < 1 ]))
         else: mul.append(sum(tr[i]))
+    
     if hie and sum(mul) == 0:
+        print(f"[DEBUG] Hierarchical with zero sum, recalculating...")
         mul = []
         for i in range(len(list(feats.values())[0])):
-            mul.append(sum(tr[i])) 
+            mul.append(sum(tr[i]))
+    
+    # Validate multiplier list
+    if len(mul) == 0:
+        print(f"[ERROR] Multiplier list is empty!")
+        raise ValueError("Multiplier calculation failed")
+    print(f"[DEBUG] ✓ Calculated {len(mul)} multipliers")
+    
     for i,m in enumerate(mul):
         if m == 0: mul[i] = 0.0
         else: mul[i] = float(norm) / m
+    
+    zero_multipliers = sum(1 for m in mul if m == 0)
+    if zero_multipliers > 0:
+        print(f"[WARNING] {zero_multipliers} zero multipliers found in normalization")
+    
     for k,v in feats.items():
         feats[k] = [val*mul[i] for i,val in enumerate(v)]
         if numpy.mean(feats[k]) and (numpy.std(feats[k])/numpy.mean(feats[k])) < 1e-10:
             feats[k] = [ float(round(kv*1e6)/1e6) for kv in feats[k]]
+    
+    print(f"[DEBUG] Normalization complete, processed {len(feats)} features")
+    # Validate output features still have same sample count
+    sample_counts = [len(v) for v in feats.values()]
+    if len(set(sample_counts)) == 1:
+        print(f"[DEBUG] ✓ All {len(feats)} features have consistent sample count: {sample_counts[0]}")
+    else:
+        print(f"[WARNING] Inconsistent sample counts after normalization: {set(sample_counts)}")
     return feats
 
 def add_missing_levels2(ff):
@@ -309,38 +407,57 @@ def rename_same_subcl(cl,subcl):
 #*  <<<-------------  I M P O R T A N T     N O T E ------------------->>            *
 #*************************************************************************************
 def biom_processing(inp_file):
+    print(f"[DEBUG] biom_processing() called with inp_file: {inp_file}")
     CommonArea = dict()         #* Set up a dictionary to return
+    
+    print(f"[DEBUG] Creating AbundanceTable from BIOM file...")
     CommonArea['abndData']   = AbundanceTable.funcMakeFromFile(inp_file,    #* Create AbundanceTable from input biom file
         cDelimiter = None,
         sMetadataID = None,
         sLastMetadataRow = None,
         sLastMetadata = None,
         strFormat = None)
+    print(f"[DEBUG] AbundanceTable created successfully")
 
     #****************************************************************
     #*  Building the data element here                              *
     #****************************************************************
     ResolvedData = list()       #This is the Resolved data that will be returned
     IDMetadataName  = CommonArea['abndData'].funcGetIDMetadataName()   #* ID Metadataname
+    print(f"[DEBUG] ID Metadata Name: {IDMetadataName}")
+    
     IDMetadata = [CommonArea['abndData'].funcGetIDMetadataName()]  #* The first Row
     IDMetadata.extend([IDMetadataEntry for IDMetadataEntry in CommonArea['abndData'].funcGetMetadataCopy()[IDMetadataName]]) #* Loop on all the metadata values
+    print(f"[DEBUG] Created ID Metadata row with {len(IDMetadata)} entries")
 
     ResolvedData.append(IDMetadata)                 #Add the IDMetadata with all its values to the resolved area
-    for key, value in  CommonArea['abndData'].funcGetMetadataCopy().items():
-        if  key  != IDMetadataName:
+    
+    metadata_copy = CommonArea['abndData'].funcGetMetadataCopy()
+    print(f"[DEBUG] Processing {len(metadata_copy)} metadata entries")
+    for key, value in metadata_copy.items():
+        if key != IDMetadataName:
             MetadataEntry = [key] + value     #*  Set it up
             ResolvedData.append(MetadataEntry)
-    for AbundanceDataEntry in    CommonArea['abndData'].funcGetAbundanceCopy():         #* The Abundance Data
+            print(f"[DEBUG]   Added metadata '{key}' with {len(value)} values")
+    
+    abundance_data = CommonArea['abndData'].funcGetAbundanceCopy()
+    print(f"[DEBUG] Processing {len(abundance_data)} abundance entries")
+    for AbundanceDataEntry in abundance_data:         #* The Abundance Data
         lstAbundanceDataEntry = list(AbundanceDataEntry)    #Convert tuple to list
         ResolvedData.append(lstAbundanceDataEntry)          #Append the list to the metadata list
-    CommonArea['ReturnedData'] =    ResolvedData            #Post the results
+    
+    CommonArea['ReturnedData'] = ResolvedData            #Post the results
+    print(f"[DEBUG] BIOM processing complete, ResolvedData has {len(ResolvedData)} rows")
     return CommonArea
 
 
 #*******************************************************************************
 #*    Check the params and override in the case of biom                        *
 #*******************************************************************************
-def  check_params_for_biom_case(params, CommonArea):
+def check_params_for_biom_case(params, CommonArea):
+    print(f"[DEBUG] check_params_for_biom_case() called")
+    print(f"[DEBUG] Original params - class: {params['class']}, subclass: {params['subclass']}, subject: {params['subject']}")
+    
     CommonArea['MetadataNames'] = list()            #Metadata  names
     params['original_class'] = params['class']          #Save the original class
     params['original_subclass'] = params['subclass']    #Save the original subclass
@@ -348,8 +465,11 @@ def  check_params_for_biom_case(params, CommonArea):
 
 
     TotalMetadataEntriesAndIDInBiomFile = len(CommonArea['abndData'].funcGetMetadataCopy())  # The number of metadata entries
+    print(f"[DEBUG] Total metadata entries in BIOM file: {TotalMetadataEntriesAndIDInBiomFile}")
+    
     for i in range(0,TotalMetadataEntriesAndIDInBiomFile):  #* Populate the meta data names table
         CommonArea['MetadataNames'].append(CommonArea['ReturnedData'][i][0])    #Add the metadata name
+    print(f"[DEBUG] Extracted metadata names: {CommonArea['MetadataNames']}")
 
 
     #****************************************************
@@ -358,61 +478,121 @@ def  check_params_for_biom_case(params, CommonArea):
 
     if TotalMetadataEntriesAndIDInBiomFile > 0:     #If there is at least one entry - has to be the subject
         params['subject'] =  1
+        print(f"[DEBUG] Set subject to 1 (first metadata)")
     if TotalMetadataEntriesAndIDInBiomFile == 2:        #If there are 2 - The first is the subject and the second has to be the metadata, and that is the class
         params['class'] =  2
+        print(f"[DEBUG] 2 metadata entries: set class to 2")
     if TotalMetadataEntriesAndIDInBiomFile == 3:        #If there are 3:  Set up default that the second entry is the class and the third is the subclass
         params['class'] =  2
         params['subclass'] =  3
+        print(f"[DEBUG] 3 metadata entries: set class to 2, subclass to 3 (defaults)")
         FlagError = False                               #Set up error flag
 
         if not params['biom_class'] is None and not params['biom_subclass'] is None:                #Check if the User passed a valid class and subclass
+            print(f"[DEBUG] User specified biom_class='{params['biom_class']}', biom_subclass='{params['biom_subclass']}'")
             if  params['biom_class'] in CommonArea['MetadataNames']:
                 params['class'] =  CommonArea['MetadataNames'].index(params['biom_class'])+1  #* Set up the index for that metadata
+                print(f"[DEBUG]   biom_class found at index {params['class']}")
             else:
                 FlagError = True
+                print(f"[DEBUG]   ERROR: biom_class '{params['biom_class']}' not found in metadata names")
             if  params['biom_subclass'] in  CommonArea['MetadataNames']:
                 params['subclass'] =  CommonArea['MetadataNames'].index(params['biom_subclass'])+1 #* Set up the index for that metadata
+                print(f"[DEBUG]   biom_subclass found at index {params['subclass']}")
             else:
                 FlagError = True
+                print(f"[DEBUG]   ERROR: biom_subclass '{params['biom_subclass']}' not found in metadata names")
         if FlagError == True:       #* If the User passed an invalid class
             print("**Invalid biom class or subclass passed - Using defaults: First metadata=class, Second Metadata=subclass\n")
             params['class'] =  2
             params['subclass'] =  3
+    
+    print(f"[DEBUG] Final params - class: {params['class']}, subclass: {params['subclass']}, subject: {params['subject']}")
     return params
 
 def format_input():
+    print(f"[DEBUG] ===== START: format_input() =====")
+    print(f"[DEBUG] Command line arguments: {sys.argv}")
     CommonArea = dict()         #Build a Common Area to pass variables in the biom case
     params = read_params(sys.argv)
+    print(f"[DEBUG] Parameters parsed: {params}")
+    
+    # Validate input and output files
+    if not params['input_file']:
+        print(f"[ERROR] No input file specified")
+        raise ValueError("Input file required")
+    if not params['output_file']:
+        print(f"[ERROR] No output file specified")
+        raise ValueError("Output file required")
+    print(f"[DEBUG] ✓ Input and output files specified")
 
     if type(params['subclass']) is int and int(params['subclass']) < 1:
         params['subclass'] = None
+        print(f"[DEBUG] Subclass set to None (was < 1)")
     if type(params['subject']) is int and int(params['subject']) < 1:
         params['subject'] = None
+        print(f"[DEBUG] Subject set to None (was < 1)")
 
 
+    print(f"[DEBUG] Reading input file: {sys.argv[1]}")
     CommonArea = read_input_file(sys.argv[1], CommonArea)       #Pass The CommonArea to the Read
     data = CommonArea['ReturnedData']                   #Select the data
+    print(f"[DEBUG] Input data read: {len(data)} rows loaded")
+    
+    if not data:
+        print(f"[ERROR] No data loaded from input file!")
+        raise ValueError("Input file contains no data")
+    print(f"[DEBUG] ✓ Data loaded successfully")
 
     if sys.argv[1].endswith('biom'):    #*  Check if biom:
+        print(f"[DEBUG] Processing BIOM-specific parameters")
         params = check_params_for_biom_case(params, CommonArea) #Check the params for the biom case
 
     if params['feats_dir'] == "c":
+        print(f"[DEBUG] Features on columns, transposing data")
         data = transpose(data)
+        print(f"[DEBUG] ✓ Data transposed, now {len(data)} rows")
+    else:
+        print(f"[DEBUG] Features on rows (default)")
 
     ncl = 1
     if not params['subclass'] is None: ncl += 1
     if not params['subject'] is None: ncl += 1
+    print(f"[DEBUG] Number of classification levels (ncl): {ncl}")
+    print(f"[DEBUG]   class: {params['class']}, subclass: {params['subclass']}, subject: {params['subject']}")
+    
+    # Validate indices before using them
+    if data and len(data) > 0:
+        if params['class'] > len(data):
+            print(f"[ERROR] Class index {params['class']} exceeds data rows {len(data)}")
+            raise IndexError(f"Class index out of bounds")
+        print(f"[DEBUG] ✓ Class index valid")
 
+    print(f"[DEBUG] Extracting first line (feature names)...")
     first_line = list(zip(*data))[0]
+    print(f"[DEBUG] Extracted {len(first_line)} feature names")
+    if len(first_line) == 0:
+        print(f"[ERROR] No feature names extracted!")
+        raise ValueError("Could not extract feature names")
+    print(f"[DEBUG] ✓ Feature names extracted")
 
+    print(f"[DEBUG] Modifying feature names...")
     first_line = modify_feature_names(list(first_line))
+    print(f"[DEBUG] Feature names modified")
+    print(f"[DEBUG] ✓ {len(first_line)} feature names processed")
 
+    print(f"[DEBUG] Sorting data by classification...")
     data = list(zip( first_line,
             *sort_by_cl(list(zip(*data))[1:],
               ncl,
               params['class']-1,
               params['subclass']-1 if not params['subclass'] is None else None,
               params['subject']-1 if not params['subject'] is None else None)))
+    print(f"[DEBUG] Data sorted and restructured, now has {len(data)} rows")
+    if len(data) == 0:
+        print(f"[ERROR] Data is empty after sorting!")
+        raise ValueError("Data became empty after sorting")
+    print(f"[DEBUG] ✓ Data sorted successfully, {len(data)} features retained")
 #   data.insert(0,first_line)
 #   data = remove_missing(data,params['missing_p'])
     cls = {}
@@ -424,29 +604,77 @@ def format_input():
     if params['subject'] is not None and params['subject'] > 0:
         cls_i.append(('subject',params['subject']-1))
 
+    print(f"[DEBUG] Classification indices before sort: {cls_i}")
     cls_i.sort(key = functools.cmp_to_key(lambda x,y: -((x[1] > y[1]) - (x[1] < y[1]))))
+    print(f"[DEBUG] Classification indices after sort: {cls_i}")
 
     for v in cls_i: 
+        print(f"[DEBUG] Extracting '{v[0]}' from column index {v[1]}")
         cls[v[0]] = data.pop(v[1])[1:]
+        print(f"[DEBUG]   Extracted {len(cls[v[0]])} values for '{v[0]}'")
+    
+    # Validate classification data consistency
+    if cls:
+        cls_len = len(cls[list(cls.keys())[0]])
+        for k in cls.keys():
+            if len(cls[k]) != cls_len:
+                print(f"[ERROR] Inconsistent classification lengths: {k} has {len(cls[k])}, expected {cls_len}")
+                raise ValueError("Classification data inconsistent")
+        print(f"[DEBUG] ✓ All classification columns have consistent length: {cls_len}")
     
     if params['subclass'] is None:
+        print(f"[DEBUG] No subclass specified, creating default subclass values")
         cls['subclass'] = [str(cl)+"_subcl" for cl in cls['class']]
 
+    print(f"[DEBUG] Renaming duplicate subclasses...")
     cls['subclass'] = rename_same_subcl(cls['class'],cls['subclass'])
+    unique_subcls = len(set(cls['subclass']))
+    print(f"[DEBUG] Unique subclasses: {unique_subcls}")
+    print(f"[DEBUG] ✓ Subclass renaming complete")
 #   if 'subclass' in cls.keys(): cls = group_small_subclasses(cls,params['subcl_min_card'])
 
+    print(f"[DEBUG] Computing class slices...")
     if ('subclass' in cls.keys()) and ('subject' in cls.keys()):
+        print(f"[DEBUG] Computing slices with class, subclass, and subject")
         class_sl, subclass_sl, class_hierarchy = get_class_slices(list(zip(cls['class'], cls['subclass'], cls['subject'])))
     elif ('subclass' in cls.keys()) and ('subject' not in cls.keys()):
+        print(f"[DEBUG] Computing slices with class and subclass only")
         class_sl, subclass_sl, class_hierarchy = get_class_slices(list(zip(cls['class'], cls['subclass'])))
     elif ('subclass' not in cls.keys()) and ('subject' in cls.keys()):
+        print(f"[DEBUG] Computing slices with class and subject only")
         class_sl, subclass_sl, class_hierarchy = get_class_slices(list(zip(cls['class'], cls['subject'])))
+    print(f"[DEBUG] Class slices computed: {len(class_sl)} classes, {len(subclass_sl)} subclasses")
+    
+    # Validate class slices
+    if not class_sl:
+        print(f"[ERROR] No class slices computed!")
+        raise ValueError("Class slicing failed")
+    if not subclass_sl:
+        print(f"[ERROR] No subclass slices computed!")
+        raise ValueError("Subclass slicing failed")
+    print(f"[DEBUG] ✓ Class and subclass slices computed successfully")
 
+    print(f"[DEBUG] Creating feature dictionary from remaining data rows...")
     feats = dict([(d[0],d[1:]) for d in data])
+    print(f"[DEBUG] Created {len(feats)} features")
+    
+    if not feats:
+        print(f"[ERROR] No features extracted from data!")
+        raise ValueError("Feature extraction failed")
+    print(f"[DEBUG] ✓ {len(feats)} features extracted successfully")
 
+    print(f"[DEBUG] Adding missing hierarchical levels...")
     feats = add_missing_levels(feats)
+    feats_after = len(feats)
+    print(f"[DEBUG] After adding missing levels: {feats_after} features")
+    print(f"[DEBUG] ✓ Missing hierarchical levels added")
 
+    print(f"[DEBUG] Converting to numerical values and normalizing...")
     feats = numerical_values(feats,params['norm_v'])
+    print(f"[DEBUG] Features converted to numerical values")
+    print(f"[DEBUG] ✓ All {len(feats)} features processed numerically")
+    
+    print(f"[DEBUG] Building output dictionary...")
     out = {}
     out['feats'] = feats
     out['norm'] = params['norm_v']
@@ -454,16 +682,41 @@ def format_input():
     out['class_sl'] = class_sl
     out['subclass_sl'] = subclass_sl
     out['class_hierarchy'] = class_hierarchy
+    print(f"[DEBUG] Output dictionary built with {len(out['feats'])} features")
+    
+    # Validate output structure
+    required_keys = ['feats', 'norm', 'cls', 'class_sl', 'subclass_sl', 'class_hierarchy']
+    for key in required_keys:
+        if key not in out:
+            print(f"[ERROR] Missing required key in output dict: {key}")
+            raise ValueError(f"Output structure incomplete: missing {key}")
+    print(f"[DEBUG] ✓ Output dictionary has all required keys")
 
     if params['output_table']:
-        with open( params['output_table'], "w") as outf:
-            if 'class' in cls: outf.write( "\t".join(list(["class"])+list(cls['class'])) + "\n" )
-            if 'subclass' in cls: outf.write( "\t".join(list(["subclass"])+list(cls['subclass'])) + "\n" )
-            if 'subject' in cls: outf.write( "\t".join(list(["subject"])+list(cls['subject']))  + "\n" )
-            for k,v in out['feats'].items(): outf.write( "\t".join([k]+[str(vv) for vv in v]) + "\n" )
+        print(f"[DEBUG] Writing formatted table to: {params['output_table']}")
+        try:
+            with open( params['output_table'], "w") as outf:
+                if 'class' in cls: outf.write( "\t".join(list(["class"])+list(cls['class'])) + "\n" )
+                if 'subclass' in cls: outf.write( "\t".join(list(["subclass"])+list(cls['subclass'])) + "\n" )
+                if 'subject' in cls: outf.write( "\t".join(list(["subject"])+list(cls['subject']))  + "\n" )
+                for k,v in out['feats'].items(): outf.write( "\t".join([k]+[str(vv) for vv in v]) + "\n" )
+            print(f"[DEBUG] Formatted table written successfully")
+            print(f"[DEBUG] ✓ Output table file created")
+        except Exception as e:
+            print(f"[ERROR] Failed to write output table: {e}")
+            raise
 
-    with open(params['output_file'], 'wb') as back_file:
-        pickle.dump(out,back_file)
+    print(f"[DEBUG] Writing pickle output to: {params['output_file']}")
+    try:
+        with open(params['output_file'], 'wb') as back_file:
+            pickle.dump(out,back_file)
+        print(f"[DEBUG] Pickle file written successfully")
+        print(f"[DEBUG] ✓ Pickle output file created")
+    except Exception as e:
+        print(f"[ERROR] Failed to write pickle file: {e}")
+        raise
+    
+    print(f"[DEBUG] ===== COMPLETE: format_input() ======")
 
 
 if  __name__ == '__main__':

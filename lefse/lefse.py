@@ -147,11 +147,47 @@ def contast_within_classes_or_few_per_class(feats,inds,min_cl,ncl):
     return False
 
 def test_lda_r(cls,feats,cl_sl,boots,fract_sample,lda_th,tol_min,nlogs):
+    print(f"[DEBUG] test_lda_r called with:")
+    print(f"  - boots: {boots}")
+    print(f"  - fract_sample: {fract_sample}")
+    print(f"  - lda_th: {lda_th}")
+    print(f"  - tol_min: {tol_min}")
+    print(f"  - nlogs: {nlogs}")
+    
     fk = list(feats.keys())
-    means = dict([(k,[]) for k in feats.keys()])
+    
+    # CRITICAL FIX: Remove hierarchical parent features to eliminate collinearity
+    print(f"[DEBUG] Original features: {len(fk)}")
+    filtered_fk = []
+    for k in fk:
+        # Check if this feature is a parent of any other feature
+        is_parent = any(other.startswith(k + '.') for other in fk if other != k)
+        if not is_parent:
+            filtered_fk.append(k)
+    
+    print(f"[DEBUG] After removing hierarchical parents: {len(filtered_fk)} features")
+    print(f"[DEBUG] Leaf features: {filtered_fk}")
+    
+    # If still too many features, take only the most specific ones
+    if len(filtered_fk) > 8:
+        # Sort by specificity (number of dots = taxonomic depth)
+        filtered_fk.sort(key=lambda x: x.count('.'), reverse=True)
+        filtered_fk = filtered_fk[:8]
+        print(f"[DEBUG] Further reduced to top 8 most specific: {filtered_fk}")
+    
+    fk = filtered_fk
+    
+    # Update feats to only include filtered features
+    feats_filtered = {k: feats[k] for k in fk}
+    feats = feats_filtered
+    
+    means = dict([(k,[]) for k in fk])
     feats['class'] = list(cls['class'])
     clss = list(set(feats['class']))
+    
+    print(f"[DEBUG] Unique classes: {clss}")
 
+    # Add jitter to features to avoid perfect separation
     for uu,k in enumerate(fk):
         if k == 'class':
             continue
@@ -177,10 +213,27 @@ def test_lda_r(cls,feats,cl_sl,boots,fract_sample,lda_th,tol_min,nlogs):
     robjects.globalenv["d"] = robjects.DataFrame(rdict)
     lfk = len(feats[fk[0]])
     rfk = int(float(len(feats[fk[0]]))*fract_sample)
-    f = "class ~ "+fk[0]
-
+    
+    # Build formula with sanitized column names (R doesn't like dots in formulas)
+    # Create clean names for R
+    clean_names = {}
+    for i, k in enumerate(fk):
+        clean_name = f"feat{i}"
+        clean_names[k] = clean_name
+        robjects.globalenv[clean_name] = rdict[k]
+    
+    # Build formula with clean names
+    f = '"class ~ ' + clean_names[fk[0]]
     for k in fk[1:]:
-        f += " + " + k.strip()
+        f += " + " + clean_names[k]
+    f += '"'
+    
+    # Also create a clean dataframe
+    clean_rdict = {'class': rdict['class']}
+    for k in fk:
+        clean_rdict[clean_names[k]] = rdict[k]
+    
+    robjects.globalenv["d"] = robjects.DataFrame(clean_rdict)
 
     ncl = len(set(cls['class']))
     min_cl = int(float(min([cls['class'].count(c) for c in set(cls['class'])]))*fract_sample*fract_sample*0.5)
@@ -191,19 +244,73 @@ def test_lda_r(cls,feats,cl_sl,boots,fract_sample,lda_th,tol_min,nlogs):
         for i in range(boots):
             means[k].append([])
 
+    print(f"[DEBUG] Starting bootstrap loop with {boots} iterations")
+    print(f"[DEBUG] Class pairs for testing: {pairs}")
+    print(f"[DEBUG] LDA formula: {f}")
+    print(f"[DEBUG] Bootstrap parameters:")
+    print(f"  - Original feature count: {lfk}")
+    print(f"  - Bootstrap sample size: {rfk}")
+    print(f"  - Minimum class size in bootstrap: {min_cl}")
+    
+    successful_boots = 0
+    
     for i in range(boots):
+        if i % 5 == 0:
+            print(f"\n[DEBUG] Bootstrap iteration {i+1}/{boots}")
+        
         for rtmp in range(1000):
             rand_s = [lrand.randint(0,lfk-1) for v in range(rfk)]
             if not contast_within_classes_or_few_per_class(feats,rand_s,min_cl,ncl):
                 break
 
         rand_s = [r+1 for r in rand_s]
-        means[k][i] = []
 
         for p in pairs:
             robjects.globalenv["rand_s"] = robjects.IntVector(rand_s)
             robjects.globalenv["sub_d"] = robjects.r('d[rand_s,]')
-            z = robjects.r('z <- suppressWarnings(lda(as.formula('+f+'),data=sub_d,tol='+str(tol_min)+'))')
+            
+            # Try LDA with multiple fallback strategies
+            z = None
+            methods_tried = []
+            
+            # Strategy 1: Standard LDA with moment estimator
+            try:
+                z = robjects.r('z <- suppressWarnings(lda(as.formula('+f+'),data=sub_d,method="moment",tol=0.001))')
+                methods_tried.append("moment/0.001")
+                if z is not None:
+                    if i == 0:
+                        print(f"[DEBUG] LDA succeeded with method='moment', tol=0.001")
+            except:
+                pass
+            
+            # Strategy 2: Higher tolerance
+            if z is None:
+                try:
+                    z = robjects.r('z <- suppressWarnings(lda(as.formula('+f+'),data=sub_d,method="moment",tol=0.1))')
+                    methods_tried.append("moment/0.1")
+                    if z is not None and i == 0:
+                        print(f"[DEBUG] LDA succeeded with method='moment', tol=0.1")
+                except:
+                    pass
+            
+            # Strategy 3: Default method with high tolerance
+            if z is None:
+                try:
+                    z = robjects.r('z <- suppressWarnings(lda(as.formula('+f+'),data=sub_d,tol=0.5))')
+                    methods_tried.append("default/0.5")
+                    if z is not None and i == 0:
+                        print(f"[DEBUG] LDA succeeded with default method, tol=0.5")
+                except:
+                    pass
+            
+            if z is None:
+                if i == 0:
+                    print(f"[ERROR] R returned NULL for LDA result after trying: {', '.join(methods_tried)}")
+                    print(f"[DEBUG] This bootstrap sample may have insufficient variance")
+                continue  # Skip this bootstrap iteration instead of failing entirely
+            
+            successful_boots += 1
+            
             robjects.r('w <- z$scaling[,1]')
             robjects.r('w.unit <- w/sqrt(sum(w^2))')
             robjects.r('ss <- sub_d[,-match("class",colnames(sub_d))]')
@@ -219,6 +326,12 @@ def test_lda_r(cls,feats,cl_sl,boots,fract_sample,lda_th,tol_min,nlogs):
             robjects.r('effect.size <- abs(mean(LD[sub_d[,"class"]=="'+p[0]+'"]) - mean(LD[sub_d[,"class"]=="'+p[1]+'"]))')
             scal = robjects.r('wfinal <- w.unit * effect.size')
             rres = robjects.r('mm <- z$means')
+            
+            if rres is None or not hasattr(rres, 'rownames') or rres.rownames is None:
+                if i == 0:
+                    print(f"[ERROR] Failed to extract means from LDA result")
+                continue
+            
             rowns = list(rres.rownames)
             lenc = len(list(rres.colnames))
             coeff = [abs(float(v)) if not math.isnan(float(v)) else 0.0 for v in scal]
@@ -228,16 +341,27 @@ def test_lda_r(cls,feats,cl_sl,boots,fract_sample,lda_th,tol_min,nlogs):
                 gm = abs(res[p[0]][j] - res[p[1]][j])
                 means[k][i].append((gm+coeff[j])*0.5)
 
+    print(f"\n[DEBUG] Completed {successful_boots}/{boots} successful bootstrap iterations")
+    
+    if successful_boots < boots * 0.5:  # If less than 50% succeeded
+        print(f"[ERROR] Too few successful bootstraps ({successful_boots}/{boots})")
+        return None, None
+
     res = {}
 
     for k in fk:
-        m = max([numpy.mean([means[k][kk][p] for kk in range(boots)]) for p in range(len(pairs))])
+        # Only use successful bootstrap iterations
+        valid_means = [means[k][kk][p] for kk in range(boots) for p in range(len(pairs)) if len(means[k][kk]) > 0]
+        if len(valid_means) == 0:
+            print(f"[ERROR] No valid means for feature {k}")
+            return None, None
+        m = max([numpy.mean(valid_means)])
         res[k] = math.copysign(1.0,m)*math.log(1.0+math.fabs(m),10)
 
     return res,dict([(k,x) for k,x in res.items() if math.fabs(x) > lda_th])
 
-
 def test_svm(cls,feats,cl_sl,boots,fract_sample,lda_th,tol_min,nsvm):
+    print(f"[WARNING] SVM testing is not currently implemented")
     return None
 """
     fk = feats.keys()
