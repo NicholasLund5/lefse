@@ -116,7 +116,7 @@ def plot(name, k_n, feat, params):
             valv = [max(min(v / norm, max_v), min_v) for v in val]
             ax.bar(pos, valv, align='center', color=col, edgecolor=col, linewidth=0.1)
             if params['subcl_median'] == 'y':
-                ax.plot([fr, to - 1], [median, median], "k--", linewidth=1, color=params['fore_color'])
+                ax.plot([fr, to - 1], [median, median], "--", linewidth=1, color=params['fore_color'])
             if params['subcl_mean'] == 'y':
                 ax.plot([fr, to - 1], [mean, mean], "-", linewidth=1, color=params['fore_color'])
             nna = subcl if subcl.count("_") == 0 or not subcl.startswith(cl) else "_".join(subcl.split(cl)[1:])

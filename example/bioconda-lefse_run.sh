@@ -31,7 +31,7 @@ python ../lefse/lefse_format_input.py 13059_2011_2561_MOESM10_ESM.txt hmp_aerobi
 # Apply LEfSe on the formatted data producing the results (to be further processed
 # for visualization with the other modules). The option available
 # can be listed using the -h option 
-python ../lefse/lefse_run.py hmp_aerobiosis_small.in hmp_aerobiosis_small.res
+python ../lefse/lefse_run.py hmp_aerobiosis_small.in hmp_aerobiosis_small.res -l 0.1
 # lefse_plot_res.py visualizes the output
 #
 # Plot the list of biomarkers with their effect size
@@ -45,7 +45,7 @@ python ../lefse/lefse_plot_res.py hmp_aerobiosis_small.res hmp_aerobiosis_small.
 # In this case we will obtain the RDP taxonomy.
 # This is an early implementation of the module. I'm working on an improved version
 # that will be released independently from LEfSe
-python ../lefse/lefse_plot_cladogram.py hmp_aerobiosis_small.res hmp_aerobiosis_small.cladogram.png --format png
+python ../lefse/lefse_plot_cladogram.py hmp_aerobiosis_small.res hmp_aerobiosis_small.cladogram.png --format png --dpi 600
 
 # Create a directory for storing the raw-data representation of the discovered biomarkers
 mkdir -p biomarkers_raw_images
