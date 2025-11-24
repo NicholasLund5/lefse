@@ -31,7 +31,7 @@ python ../lefse/lefse_format_input.py 13059_2011_2561_MOESM10_ESM.txt hmp_aerobi
 # Apply LEfSe on the formatted data producing the results (to be further processed
 # for visualization with the other modules). The option available
 # can be listed using the -h option 
-python ../lefse/lefse_run.py hmp_aerobiosis_small.in hmp_aerobiosis_small.res -l -1
+python ../lefse/lefse_run.py hmp_aerobiosis_small.in hmp_aerobiosis_small.res
 # lefse_plot_res.py visualizes the output
 #
 # Plot the list of biomarkers with their effect size
