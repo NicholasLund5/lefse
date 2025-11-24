@@ -24,7 +24,7 @@ export PYTHONPATH="$LEFSE_ROOT:$PYTHONPATH"
 # the value -1 for them.
 # -o 1000000 scales the feature such that the sum (of the same taxonomic leve)
 # is 1M: this is done only for obtaining more meaningful values for the LDA score
-python ../lefse/lefse_format_input.py hmp_aerobiosis_small.txt hmp_aerobiosis_small.in -c 1 -s 2 -u 3 -o 1000000
+python ../lefse/lefse_format_input.py 13059_2011_2561_MOESM10_ESM.txt hmp_aerobiosis_small.in -c 1 -s 2 -u 3 -o 1000000
 
 # lefse_run.py performs the actual statistical analysis
 #
